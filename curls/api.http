@@ -1,0 +1,7 @@
+curl -X POST -H "Content-Type: application/json" -d '{
+  "app_name": "Visual Studio Code",
+  "window_title": "main.go - personal-os",
+  "user_defined_name": "Go Programming",
+  "is_helpful": true,
+  "goal_context": "Work"
+}' http://localhost:8080/api/v0/classify
