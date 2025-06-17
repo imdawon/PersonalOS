@@ -39,4 +39,16 @@ class ApiService {
       throw Exception('Failed to classify session');
     }
   }
+
+  Future<void> classifySessionBatch(BatchClassificationRequest request) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/classify-batch'),
+      headers: {'Content-Type': 'application/json'},
+      body: request.toJson(),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to classify batch');
+    }
+  }
 }

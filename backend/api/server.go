@@ -24,6 +24,7 @@ func (s *Server) Start(addr string) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v0/unclassified-sessions", s.handleGetUnclassified)
 	mux.HandleFunc("/api/v0/classify", s.handleClassify)
+	mux.HandleFunc("/api/v0/classify-batch", s.handleClassifyBatch)
 	mux.HandleFunc("/api/v0/today-summary", s.handleGetTodaySummary)
 
 	log.Printf("API server listening on %s", addr)
@@ -58,6 +59,24 @@ func (s *Server) handleClassify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.respondJSON(w, http.StatusOK, map[string]string{"status": "success"})
+}
+
+func (s *Server) handleClassifyBatch(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Only POST method is allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req models.BatchClassificationRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if err := s.store.ApplyClassificationBatch(req); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	s.respondJSON(w, http.StatusOK, map[string]string{"status": "success"})
 }
 

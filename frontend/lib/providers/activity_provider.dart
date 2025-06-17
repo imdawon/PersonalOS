@@ -110,27 +110,29 @@ class ActivityProvider with ChangeNotifier {
     _error = null;
     notifyListeners();
 
-    List<Future<void>> classificationFutures = [];
-    final sessionsToClassify = _groupedUnclassifiedSessions[appName] ?? [];
+    try {
+      final sessionsToClassify = _groupedUnclassifiedSessions[appName] ?? [];
+      if (sessionsToClassify.isEmpty) {
+        throw Exception("No sessions to classify for app: $appName");
+      }
 
-    for (var session in sessionsToClassify) {
-      final request = ClassificationRequest(
-        appName: session.appName, // Use original appName from session
-        windowTitle: session.windowTitle, // Use original windowTitle from session
+      final batchRequest = BatchClassificationRequest(
+        sessions: sessionsToClassify
+            .map((s) => SessionIdentifier(
+                  appName: s.appName,
+                  windowTitle: s.windowTitle,
+                ))
+            .toList(),
         userDefinedName: userDefinedName,
         isHelpful: isHelpful,
         goalContext: goalContext,
       );
-      classificationFutures.add(_apiService.classifySession(request));
-    }
 
-    try {
-      await Future.wait(classificationFutures); // Process all in parallel
-      await fetchAllData(); // Refresh all data after all are done
+      await _apiService.classifySessionBatch(batchRequest);
+      await fetchAllData(); // Refresh all data after the batch is done
     } catch (e) {
       print("Error classifying app group: $e");
       _error = "Failed to classify group.";
-      // isLoading will be set to false in finally
     } finally {
       _isLoading = false;
       notifyListeners();

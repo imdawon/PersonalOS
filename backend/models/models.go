@@ -36,3 +36,17 @@ type ClassificationRequest struct {
 	IsHelpful       bool   `json:"is_helpful"`
 	GoalContext     string `json:"goal_context"`
 }
+
+// SessionIdentifier is used to uniquely identify a session for batch classification.
+type SessionIdentifier struct {
+	AppName     string `json:"app_name"`
+	WindowTitle string `json:"window_title"`
+}
+
+// BatchClassificationRequest is used by the API to classify a batch of activities.
+type BatchClassificationRequest struct {
+	Sessions        []SessionIdentifier `json:"sessions"`
+	UserDefinedName string              `json:"user_defined_name"`
+	IsHelpful       bool                `json:"is_helpful"`
+	GoalContext     string              `json:"goal_context"`
+}

@@ -129,6 +129,58 @@ func (s *DBStore) ApplyClassification(req models.ClassificationRequest) error {
 	return tx.Commit()
 }
 
+// ApplyClassificationBatch assigns a classification to a batch of sessions.
+func (s *DBStore) ApplyClassificationBatch(req models.BatchClassificationRequest) error {
+	if len(req.Sessions) == 0 {
+		return nil
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+
+	// 1. Find or create the classification ID.
+	var classID int64
+	err = tx.QueryRow("SELECT id FROM classifications WHERE user_defined_name = ?", req.UserDefinedName).Scan(&classID)
+	if err == sql.ErrNoRows {
+		res, err := tx.Exec("INSERT INTO classifications (user_defined_name, is_helpful, goal_context) VALUES (?, ?, ?)",
+			req.UserDefinedName, req.IsHelpful, req.GoalContext)
+		if err != nil {
+			tx.Rollback()
+			return err
+		}
+		classID, _ = res.LastInsertId()
+	} else if err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	// 2. Build a single UPDATE query for all sessions in the batch.
+	query := "UPDATE activity_sessions SET classification_id = ? WHERE classification_id IS NULL AND ("
+	args := []interface{}{classID}
+	placeholders := []string{}
+
+	for _, session := range req.Sessions {
+		placeholders = append(placeholders, "(app_name = ? AND window_title = ?)")
+		args = append(args, session.AppName, session.WindowTitle)
+	}
+
+	query += strings.Join(placeholders, " OR ") + ")"
+
+	// 3. Execute the batch update.
+	res, err := tx.Exec(query, args...)
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	rowsAffected, _ := res.RowsAffected()
+	log.Printf("ApplyClassificationBatch updated %d rows", rowsAffected)
+
+	return tx.Commit()
+}
+
 // ProcessRawEvents is called by the processor to aggregate events into sessions.
 func (s *DBStore) ProcessRawEvents() error {
 	// This is a simplified but effective v0 processor logic.
