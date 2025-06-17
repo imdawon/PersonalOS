@@ -1,24 +1,23 @@
-// frontend/lib/widgets/classification_dialog.dart
+// frontend/lib/widgets/classification_dialog_for_group.dart
 import 'package:flutter/material.dart';
-import 'package:PersonalOS/models/activity_session.dart'; // Keep this for type hint if needed
 
-class ClassificationDialog extends StatefulWidget {
-  // We don't strictly need the whole session object if we pass appName & windowTitle,
-  // but it's fine for now for single classifications.
-  final ActivitySession session;
+class ClassificationDialogForGroup extends StatefulWidget {
+  final String appName;
+  final int itemCount;
   final Function(String userDefinedName, bool isHelpful, String goalContext) onSave;
 
-  const ClassificationDialog({
+  const ClassificationDialogForGroup({
     super.key,
-    required this.session,
+    required this.appName,
+    required this.itemCount,
     required this.onSave,
   });
 
   @override
-  State<ClassificationDialog> createState() => _ClassificationDialogState();
+  State<ClassificationDialogForGroup> createState() => _ClassificationDialogForGroupState();
 }
 
-class _ClassificationDialogState extends State<ClassificationDialog> {
+class _ClassificationDialogForGroupState extends State<ClassificationDialogForGroup> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _nameController;
   bool _isHelpful = true;
@@ -28,7 +27,6 @@ class _ClassificationDialogState extends State<ClassificationDialog> {
   void initState() {
     super.initState();
     _nameController = TextEditingController();
-    // Pre-fill if there's a common pattern later, or from session if relevant
   }
 
   @override
@@ -51,7 +49,7 @@ class _ClassificationDialogState extends State<ClassificationDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text('Classify: ${widget.session.appName}'),
+      title: Text('Classify All in "${widget.appName}"'),
       content: Form(
         key: _formKey,
         child: SingleChildScrollView(
@@ -60,17 +58,13 @@ class _ClassificationDialogState extends State<ClassificationDialog> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               Text(
-                widget.session.windowTitle.isNotEmpty 
-                ? widget.session.windowTitle 
-                : '(No Window Title)', 
-                style: Theme.of(context).textTheme.bodySmall,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
+                "This will apply the same classification to ${widget.itemCount} unclassified activities from \"${widget.appName}\".",
+                 style: Theme.of(context).textTheme.bodySmall,
               ),
               const SizedBox(height: 16),
               TextFormField(
                 controller: _nameController,
-                decoration: const InputDecoration(labelText: 'Activity Name (e.g., Programming)'),
+                decoration: const InputDecoration(labelText: 'Activity Name (e.g., Browsing)'),
                 validator: (value) {
                   if (value == null || value.isEmpty) {
                     return 'Please enter a name';
@@ -82,7 +76,7 @@ class _ClassificationDialogState extends State<ClassificationDialog> {
               DropdownButtonFormField<String>(
                 value: _goalContext,
                 decoration: const InputDecoration(labelText: 'Goal Context'),
-                items: ['Work', 'Learn', 'Relax', 'Personal', 'Wasting Time', 'Admin']
+                 items: ['Work', 'Learn', 'Relax', 'Personal', 'Wasting Time', 'Admin']
                     .map((label) => DropdownMenuItem(
                           value: label,
                           child: Text(label),
@@ -119,7 +113,7 @@ class _ClassificationDialogState extends State<ClassificationDialog> {
         ),
         ElevatedButton(
           onPressed: _submitForm,
-          child: const Text('Save'),
+          child: Text('Save for All (${widget.itemCount})'),
         ),
       ],
     );
