@@ -62,3 +62,29 @@ class BatchClassificationRequest {
     });
   }
 }
+
+class CreateClassificationRuleRequest {
+  final String appName;
+  final String windowTitleContains;
+  final String userDefinedName;
+  final bool isHelpful;
+  final String goalContext;
+
+  CreateClassificationRuleRequest({
+    required this.appName,
+    required this.windowTitleContains,
+    required this.userDefinedName,
+    required this.isHelpful,
+    required this.goalContext,
+  });
+
+  String toJson() {
+    return json.encode({
+      'app_name': appName,
+      'window_title_contains': windowTitleContains,
+      'user_defined_name': userDefinedName,
+      'is_helpful': isHelpful,
+      'goal_context': goalContext,
+    });
+  }
+}

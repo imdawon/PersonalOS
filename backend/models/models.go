@@ -50,3 +50,38 @@ type BatchClassificationRequest struct {
 	IsHelpful       bool                `json:"is_helpful"`
 	GoalContext     string              `json:"goal_context"`
 }
+
+// ClassificationRule defines a rule for automatic classification.
+type ClassificationRule struct {
+	ID                  int64  `json:"id"`
+	AppName             string `json:"app_name"`
+	WindowTitleContains string `json:"window_title_contains"`
+	ClassificationID    int64  `json:"classification_id"`
+	Priority            int    `json:"priority"`
+}
+
+// CreateClassificationRuleRequest is the model for the API request to create a rule.
+type CreateClassificationRuleRequest struct {
+	AppName             string `json:"app_name"`
+	WindowTitleContains string `json:"window_title_contains"`
+	UserDefinedName     string `json:"user_defined_name"`
+	IsHelpful           bool   `json:"is_helpful"`
+	GoalContext         string `json:"goal_context"`
+}
+
+// RuleInfo is a model for returning a rule joined with its classification name.
+type RuleInfo struct {
+	ID                  int64  `json:"id"`
+	AppName             string `json:"app_name"`
+	WindowTitleContains string `json:"window_title_contains"`
+	UserDefinedName     string `json:"user_defined_name"`
+}
+
+// RecentActivityInfo is a model for a recently classified session.
+type RecentActivityInfo struct {
+	AppName         string `json:"app_name"`
+	WindowTitle     string `json:"window_title"`
+	UserDefinedName string `json:"user_defined_name"`
+	StartTime       int64  `json:"start_time"`
+	IsAuto          bool   `json:"is_auto"`
+}

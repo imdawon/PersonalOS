@@ -115,14 +115,6 @@ class UnclassifiedScreen extends StatelessWidget {
                               return ClassificationDialogForGroup(
                                 appName: appName,
                                 itemCount: sessionsInGroup.length,
-                                onSave: (String userDefinedName, bool isHelpful, String goalContext) {
-                                  Provider.of<ActivityProvider>(context, listen: false).classifyAppGroup(
-                                    appName,
-                                    userDefinedName,
-                                    isHelpful,
-                                    goalContext,
-                                  );
-                                },
                               );
                             },
                           );

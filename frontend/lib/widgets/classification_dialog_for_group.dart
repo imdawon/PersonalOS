@@ -1,16 +1,16 @@
 // frontend/lib/widgets/classification_dialog_for_group.dart
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../providers/activity_provider.dart';
 
 class ClassificationDialogForGroup extends StatefulWidget {
   final String appName;
   final int itemCount;
-  final Function(String userDefinedName, bool isHelpful, String goalContext) onSave;
 
   const ClassificationDialogForGroup({
     super.key,
     required this.appName,
     required this.itemCount,
-    required this.onSave,
   });
 
   @override
@@ -20,28 +20,45 @@ class ClassificationDialogForGroup extends StatefulWidget {
 class _ClassificationDialogForGroupState extends State<ClassificationDialogForGroup> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _nameController;
+  late TextEditingController _windowTitleContainsController;
   bool _isHelpful = true;
   String _goalContext = 'Work';
+  bool _createRule = false;
 
   @override
   void initState() {
     super.initState();
     _nameController = TextEditingController();
+    _windowTitleContainsController = TextEditingController();
   }
 
   @override
   void dispose() {
     _nameController.dispose();
+    _windowTitleContainsController.dispose();
     super.dispose();
   }
 
   void _submitForm() {
     if (_formKey.currentState!.validate()) {
-      widget.onSave(
-        _nameController.text,
-        _isHelpful,
-        _goalContext,
-      );
+      final provider = Provider.of<ActivityProvider>(context, listen: false);
+
+      if (_createRule) {
+        provider.createRuleAndClassifyAppGroup(
+          appName: widget.appName,
+          windowTitleContains: _windowTitleContainsController.text,
+          userDefinedName: _nameController.text,
+          isHelpful: _isHelpful,
+          goalContext: _goalContext,
+        );
+      } else {
+        provider.classifyAppGroup(
+          widget.appName,
+          _nameController.text,
+          _isHelpful,
+          _goalContext,
+        );
+      }
       Navigator.of(context).pop();
     }
   }
@@ -100,6 +117,28 @@ class _ClassificationDialogForGroupState extends State<ClassificationDialogForGr
                 dense: true,
                 contentPadding: EdgeInsets.zero,
               ),
+              const Divider(height: 32),
+              SwitchListTile(
+                title: const Text('Create automation rule?'),
+                subtitle: const Text('Automatically classify similar activities in the future.'),
+                value: _createRule,
+                onChanged: (bool value) {
+                  setState(() {
+                    _createRule = value;
+                  });
+                },
+              ),
+              if (_createRule)
+                Padding(
+                  padding: const EdgeInsets.only(top: 12.0),
+                  child: TextFormField(
+                    controller: _windowTitleContainsController,
+                    decoration: const InputDecoration(
+                      labelText: 'If window title contains...',
+                      hintText: '(Optional, leave empty to match any)',
+                    ),
+                  ),
+                ),
             ],
           ),
         ),

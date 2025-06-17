@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strconv"
 
 	"github.com/imdawon/personalos/models"
 	"github.com/imdawon/personalos/storage"
@@ -26,6 +27,8 @@ func (s *Server) Start(addr string) {
 	mux.HandleFunc("/api/v0/classify", s.handleClassify)
 	mux.HandleFunc("/api/v0/classify-batch", s.handleClassifyBatch)
 	mux.HandleFunc("/api/v0/today-summary", s.handleGetTodaySummary)
+	mux.HandleFunc("/api/v0/rules", s.handleRules)
+	mux.HandleFunc("/api/v0/recent-activity", s.handleGetRecentActivity)
 
 	log.Printf("API server listening on %s", addr)
 	if err := http.ListenAndServe(addr, mux); err != nil {
@@ -80,6 +83,65 @@ func (s *Server) handleClassifyBatch(w http.ResponseWriter, r *http.Request) {
 	s.respondJSON(w, http.StatusOK, map[string]string{"status": "success"})
 }
 
+func (s *Server) handleRules(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		s.handleGetRules(w, r)
+	case http.MethodPost:
+		s.handleCreateRule(w, r)
+	case http.MethodDelete:
+		s.handleDeleteRule(w, r)
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Server) handleGetRules(w http.ResponseWriter, r *http.Request) {
+	rules, err := s.store.GetClassificationRules()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	s.respondJSON(w, http.StatusOK, rules)
+}
+
+func (s *Server) handleDeleteRule(w http.ResponseWriter, r *http.Request) {
+	idStr := r.URL.Query().Get("id")
+	if idStr == "" {
+		http.Error(w, "Missing rule ID", http.StatusBadRequest)
+		return
+	}
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		http.Error(w, "Invalid rule ID", http.StatusBadRequest)
+		return
+	}
+
+	if err := s.store.DeleteClassificationRule(id); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	s.respondJSON(w, http.StatusOK, map[string]string{"status": "rule deleted"})
+}
+
+func (s *Server) handleCreateRule(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Only POST method is allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req models.CreateClassificationRuleRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if err := s.store.CreateClassificationRule(req); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	s.respondJSON(w, http.StatusCreated, map[string]string{"status": "rule created"})
+}
+
 func (s *Server) handleGetTodaySummary(w http.ResponseWriter, r *http.Request) {
 	summary, err := s.store.GetTodaySummary()
 	if err != nil {
@@ -87,6 +149,15 @@ func (s *Server) handleGetTodaySummary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.respondJSON(w, http.StatusOK, summary)
+}
+
+func (s *Server) handleGetRecentActivity(w http.ResponseWriter, r *http.Request) {
+	activities, err := s.store.GetRecentClassifiedSessions()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	s.respondJSON(w, http.StatusOK, activities)
 }
 
 func (s *Server) respondJSON(w http.ResponseWriter, status int, payload interface{}) {

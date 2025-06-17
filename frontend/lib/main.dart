@@ -3,6 +3,7 @@ import 'package:PersonalOS/providers/activity_provider.dart';
 import 'package:PersonalOS/screens/dashboard_screen.dart';
 import 'package:PersonalOS/screens/unclassified_screen.dart';
 import 'package:provider/provider.dart';
+import 'screens/logbook_screen.dart';
 
 void main() {
   runApp(const MyApp());
@@ -42,6 +43,7 @@ class _MainScreenState extends State<MainScreen> {
   static const List<Widget> _widgetOptions = <Widget>[
     DashboardScreen(),
     UnclassifiedScreen(),
+    LogbookScreen(),
   ];
 
   void _onItemTapped(int index) {
@@ -51,36 +53,43 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   @override
-Widget build(BuildContext context) {
-  return Scaffold(
-    appBar: AppBar(
-      title: Text(_selectedIndex == 0 ? 'Today\'s Dashboard' : 'Unclassified Activities'),
-      actions: [
-        IconButton(
-          icon: const Icon(Icons.refresh),
-          onPressed: () {
-            Provider.of<ActivityProvider>(context, listen: false).fetchAllData();
-          },
-        ),
-      ],
-    ),
-    body: Center(
-      child: _widgetOptions.elementAt(_selectedIndex),
-    ),
-    bottomNavigationBar: BottomNavigationBar(
-      items: const <BottomNavigationBarItem>[
-        BottomNavigationBarItem(
-          icon: Icon(Icons.dashboard),
-          label: 'Dashboard',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.help_outline),
-          label: 'Classify',
-        ),
-      ],
-      currentIndex: _selectedIndex,
-      onTap: _onItemTapped,
-    ),
-  );
-}
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(_selectedIndex == 0 ? 'Today\'s Dashboard' : _selectedIndex == 1 ? 'Unclassified Activities' : 'Logbook'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () {
+              Provider.of<ActivityProvider>(context, listen: false).fetchAllData();
+            },
+          ),
+        ],
+      ),
+      body: Center(
+        child: _widgetOptions.elementAt(_selectedIndex),
+      ),
+      bottomNavigationBar: BottomNavigationBar(
+        items: const <BottomNavigationBarItem>[
+          BottomNavigationBarItem(
+            icon: Icon(Icons.dashboard_outlined),
+            activeIcon: Icon(Icons.dashboard),
+            label: 'Dashboard',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.inbox_outlined),
+            activeIcon: Icon(Icons.inbox),
+            label: 'Classify',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.book_outlined),
+            activeIcon: Icon(Icons.book),
+            label: 'Logbook',
+          ),
+        ],
+        currentIndex: _selectedIndex,
+        onTap: _onItemTapped,
+      ),
+    );
+  }
 }

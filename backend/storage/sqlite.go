@@ -53,6 +53,14 @@ func (s *DBStore) initSchema() error {
             is_helpful BOOLEAN NOT NULL,
             goal_context TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS classification_rules (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            app_name TEXT NOT NULL,
+            window_title_contains TEXT NOT NULL,
+            classification_id INTEGER NOT NULL,
+            priority INTEGER NOT NULL DEFAULT 0,
+            FOREIGN KEY(classification_id) REFERENCES classifications(id) ON DELETE CASCADE
+        );
     `
 	_, err := s.db.Exec(schema)
 	return err
@@ -181,6 +189,43 @@ func (s *DBStore) ApplyClassificationBatch(req models.BatchClassificationRequest
 	return tx.Commit()
 }
 
+// CreateClassificationRule creates a new rule for automatic classification.
+func (s *DBStore) CreateClassificationRule(req models.CreateClassificationRuleRequest) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+
+	// 1. Find or create the classification ID.
+	var classID int64
+	err = tx.QueryRow("SELECT id FROM classifications WHERE user_defined_name = ?", req.UserDefinedName).Scan(&classID)
+	if err == sql.ErrNoRows {
+		res, err := tx.Exec("INSERT INTO classifications (user_defined_name, is_helpful, goal_context) VALUES (?, ?, ?)",
+			req.UserDefinedName, req.IsHelpful, req.GoalContext)
+		if err != nil {
+			tx.Rollback()
+			return err
+		}
+		classID, _ = res.LastInsertId()
+	} else if err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	// 2. Insert the new rule.
+	_, err = tx.Exec(`
+		INSERT INTO classification_rules (app_name, window_title_contains, classification_id)
+		VALUES (?, ?, ?)
+	`, req.AppName, req.WindowTitleContains, classID)
+
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	return tx.Commit()
+}
+
 // ProcessRawEvents is called by the processor to aggregate events into sessions.
 func (s *DBStore) ProcessRawEvents() error {
 	// This is a simplified but effective v0 processor logic.
@@ -252,10 +297,27 @@ func (s *DBStore) ProcessRawEvents() error {
 }
 
 func (s *DBStore) saveSession(session *models.ActivitySession) error {
-	_, err := s.db.Exec(`
-		INSERT INTO activity_sessions (app_name, window_title, start_time, end_time, duration_seconds)
-		VALUES (?, ?, ?, ?, ?)
-	`, session.AppName, session.WindowTitle, session.StartTime.Unix(), session.EndTime.Unix(), session.Duration)
+	// Check for a matching rule before saving.
+	var matchingClassID sql.NullInt64
+	err := s.db.QueryRow(`
+		SELECT classification_id FROM classification_rules
+		WHERE app_name = ? AND ? LIKE '%' || window_title_contains || '%'
+		ORDER BY priority DESC, id DESC LIMIT 1
+	`, session.AppName, session.WindowTitle).Scan(&matchingClassID)
+
+	// If a rule is found, apply its classification ID to the session.
+	if err == nil && matchingClassID.Valid {
+		session.ClassificationID = matchingClassID.Int64
+		log.Printf("Automatically classified session for '%s' using a rule.", session.AppName)
+	} else if err != nil && err != sql.ErrNoRows {
+		// Log the error but don't block saving the session.
+		log.Printf("Error checking classification rules: %v", err)
+	}
+
+	_, err = s.db.Exec(`
+		INSERT INTO activity_sessions (app_name, window_title, start_time, end_time, duration_seconds, classification_id)
+		VALUES (?, ?, ?, ?, ?, ?)
+	`, session.AppName, session.WindowTitle, session.StartTime.Unix(), session.EndTime.Unix(), session.Duration, session.ClassificationID)
 	return err
 }
 
@@ -326,4 +388,74 @@ func (s *DBStore) GetTodaySummary() ([]TodaySummaryItem, error) {
 	}
 
 	return summary, nil
+}
+
+// GetClassificationRules retrieves all rules, joined with their classification names.
+func (s *DBStore) GetClassificationRules() ([]models.RuleInfo, error) {
+	rows, err := s.db.Query(`
+		SELECT r.id, r.app_name, r.window_title_contains, c.user_defined_name
+		FROM classification_rules r
+		JOIN classifications c ON r.classification_id = c.id
+		ORDER BY r.id DESC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var rules []models.RuleInfo
+	for rows.Next() {
+		var rule models.RuleInfo
+		if err := rows.Scan(&rule.ID, &rule.AppName, &rule.WindowTitleContains, &rule.UserDefinedName); err != nil {
+			return nil, err
+		}
+		rules = append(rules, rule)
+	}
+	if rules == nil {
+		return make([]models.RuleInfo, 0), nil
+	}
+	return rules, nil
+}
+
+// DeleteClassificationRule removes a rule by its ID.
+func (s *DBStore) DeleteClassificationRule(id int64) error {
+	_, err := s.db.Exec("DELETE FROM classification_rules WHERE id = ?", id)
+	return err
+}
+
+// GetRecentClassifiedSessions retrieves the 50 most recently classified sessions.
+func (s *DBStore) GetRecentClassifiedSessions() ([]models.RecentActivityInfo, error) {
+	rows, err := s.db.Query(`
+		SELECT
+			s.app_name,
+			s.window_title,
+			c.user_defined_name,
+			s.start_time
+		FROM activity_sessions s
+		JOIN classifications c ON s.classification_id = c.id
+		WHERE s.classification_id IS NOT NULL
+		ORDER BY s.start_time DESC
+		LIMIT 50
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var activities []models.RecentActivityInfo
+	for rows.Next() {
+		var activity models.RecentActivityInfo
+		if err := rows.Scan(&activity.AppName, &activity.WindowTitle, &activity.UserDefinedName, &activity.StartTime); err != nil {
+			return nil, err
+		}
+		// NOTE: is_auto is not yet implemented in the DB, defaulting to false for now.
+		// This can be enhanced later if we add a column to track how a session was classified.
+		activity.IsAuto = false
+		activities = append(activities, activity)
+	}
+
+	if activities == nil {
+		return make([]models.RecentActivityInfo, 0), nil
+	}
+	return activities, nil
 }
