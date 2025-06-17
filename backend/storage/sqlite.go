@@ -307,12 +307,13 @@ func (s *DBStore) saveSession(session *models.ActivitySession) error {
 
 	// If a rule is found, apply its classification ID to the session.
 	if err == nil && matchingClassID.Valid {
-		session.ClassificationID = matchingClassID.Int64
+		session.ClassificationID = &matchingClassID.Int64
 		log.Printf("Automatically classified session for '%s' using a rule.", session.AppName)
 	} else if err != nil && err != sql.ErrNoRows {
 		// Log the error but don't block saving the session.
 		log.Printf("Error checking classification rules: %v", err)
 	}
+	// If no rule is found, ClassificationID remains nil (NULL in database)
 
 	_, err = s.db.Exec(`
 		INSERT INTO activity_sessions (app_name, window_title, start_time, end_time, duration_seconds, classification_id)

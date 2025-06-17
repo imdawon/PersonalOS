@@ -17,7 +17,7 @@ type ActivitySession struct {
 	StartTime        time.Time `json:"start_time"`
 	EndTime          time.Time `json:"end_time"`
 	Duration         int64     `json:"duration_seconds"` // Duration in seconds
-	ClassificationID int64     `json:"classification_id,omitempty"`
+	ClassificationID *int64    `json:"classification_id,omitempty"`
 }
 
 // Classification is a user-defined label for an activity.
