@@ -18,7 +18,7 @@ const (
 	dbPath             = "personal_os.db"
 	trackingInterval   = 5 * time.Second
 	processingInterval = 1 * time.Minute
-	apiAddr            = "localhost:8080"
+	apiAddr            = "localhost:8085"
 )
 
 func main() {

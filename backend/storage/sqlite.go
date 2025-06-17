@@ -3,6 +3,7 @@ package storage
 import (
 	"database/sql"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -217,4 +218,54 @@ func intSliceToString(ids []int64) string {
 		fmt.Fprintf(&b, ",%d", id)
 	}
 	return b.String()
+}
+
+// In storage/sqlite.go
+
+// TodaySummaryItem represents a single aggregated activity for the dashboard.
+type TodaySummaryItem struct {
+	UserDefinedName string `json:"user_defined_name"`
+	TotalDuration   int64  `json:"total_duration_seconds"`
+}
+
+// GetTodaySummary fetches aggregated, classified data for the current day.
+func (s *DBStore) GetTodaySummary() ([]TodaySummaryItem, error) {
+	// Get the Unix timestamp for the start of the current day in UTC.
+	// NOTE: For more complex timezone handling, this would need adjustment.
+	// For v0, UTC is fine.
+	startOfDay := time.Now().UTC().Truncate(24 * time.Hour)
+
+	rows, err := s.db.Query(`
+        SELECT
+            c.user_defined_name,
+            SUM(s.duration_seconds) as total_duration
+        FROM activity_sessions s
+        JOIN classifications c ON s.classification_id = c.id
+        WHERE s.start_time >= ? AND s.classification_id IS NOT NULL 
+        GROUP BY c.user_defined_name
+        HAVING total_duration > 0 
+        ORDER BY total_duration DESC;
+    `, startOfDay.Unix()) // Make sure start_time is compared correctly
+	if err != nil {
+		log.Printf("Error querying today summary: %v", err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	// Initialize as an empty slice, not nil, to ensure JSON [] for no results
+	summary := make([]TodaySummaryItem, 0)
+	for rows.Next() {
+		var item TodaySummaryItem
+		if err := rows.Scan(&item.UserDefinedName, &item.TotalDuration); err != nil {
+			log.Printf("Error scanning today summary item: %v", err)
+			// Decide if you want to return partial results or error out
+			return nil, err
+		}
+		summary = append(summary, item)
+	}
+	if err := rows.Err(); err != nil { // Check for errors during iteration
+		log.Printf("Error during rows iteration for today summary: %v", err)
+		return nil, err
+	}
+	return summary, nil
 }

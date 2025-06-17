@@ -1,4 +1,4 @@
-# frontend
+# PersonalOS
 
 A new Flutter project.
 

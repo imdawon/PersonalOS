@@ -24,6 +24,7 @@ func (s *Server) Start(addr string) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v0/unclassified-sessions", s.handleGetUnclassified)
 	mux.HandleFunc("/api/v0/classify", s.handleClassify)
+	mux.HandleFunc("/api/v0/today-summary", s.handleGetTodaySummary)
 
 	log.Printf("API server listening on %s", addr)
 	if err := http.ListenAndServe(addr, mux); err != nil {
@@ -58,6 +59,15 @@ func (s *Server) handleClassify(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.respondJSON(w, http.StatusOK, map[string]string{"status": "success"})
+}
+
+func (s *Server) handleGetTodaySummary(w http.ResponseWriter, r *http.Request) {
+	summary, err := s.store.GetTodaySummary()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	s.respondJSON(w, http.StatusOK, summary)
 }
 
 func (s *Server) respondJSON(w http.ResponseWriter, status int, payload interface{}) {
