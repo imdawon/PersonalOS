@@ -63,10 +63,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         if (provider.isLoading && provider.todaySummary.isEmpty) {
           return const Center(child: CircularProgressIndicator());
         }
-        if (provider.error != null && provider.todaySummary.isEmpty) {
-           return Center(child: Text("Error: ${provider.error}"));
-        }
 
+        // Priority 1: If there's no data, show the empty state message. This is not an error.
         if (provider.todaySummary.isEmpty) {
           return const Center(
             child: Column(
@@ -80,6 +78,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ],
             ),
           );
+        }
+
+        // Priority 2: If there IS data but an error occurred during a refresh, show the error.
+        if (provider.error != null) {
+           return Center(child: Text("Error: ${provider.error}"));
         }
 
         double totalDurationForAllActivities = provider.todaySummary.fold(0, (sum, item) => sum + item.totalDuration);

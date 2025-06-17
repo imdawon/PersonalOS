@@ -80,7 +80,7 @@ func (s *DBStore) GetUnclassifiedSessions() ([]models.ActivitySession, error) {
 	}
 	defer rows.Close()
 
-	var sessions []models.ActivitySession
+	sessions := make([]models.ActivitySession, 0) // Initialize as empty slice, not nil
 	for rows.Next() {
 		var session models.ActivitySession
 		if err := rows.Scan(&session.AppName, &session.WindowTitle, &session.Duration); err != nil {
@@ -319,5 +319,11 @@ func (s *DBStore) GetTodaySummary() ([]TodaySummaryItem, error) {
 		log.Printf("Error during rows iteration for today summary: %v", err)
 		return nil, err
 	}
+
+	// This is defensive. If summary is still nil, return an empty slice.
+	if summary == nil {
+		return make([]TodaySummaryItem, 0), nil
+	}
+
 	return summary, nil
 }

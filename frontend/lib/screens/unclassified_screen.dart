@@ -27,9 +27,28 @@ class UnclassifiedScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<ActivityProvider>(
       builder: (context, provider, child) {
+        // Show loading spinner only when fetching initial data.
         if (provider.isLoading && provider.groupedUnclassifiedSessions.isEmpty) {
           return const Center(child: CircularProgressIndicator());
         }
+
+        // If there's nothing to classify, that's the most important state. Show success message.
+        if (provider.groupedUnclassifiedSessions.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.check_circle_outline, color: Colors.green, size: 60),
+                const SizedBox(height: 16),
+                const Text('All activities classified! 🎉', style: TextStyle(fontSize: 20)),
+                 const SizedBox(height: 8),
+                Text("Check your Dashboard tab.", style: TextStyle(fontSize: 16, color: Colors.grey[400])),
+              ],
+            ),
+          );
+        }
+
+        // If we have data but there was an error fetching updates, show it.
         if (provider.error != null) {
           return Center(
             child: Padding(
@@ -47,21 +66,6 @@ class UnclassifiedScreen extends StatelessWidget {
                   )
                 ],
               ),
-            ),
-          );
-        }
-
-        if (provider.groupedUnclassifiedSessions.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.check_circle_outline, color: Colors.green, size: 60),
-                const SizedBox(height: 16),
-                const Text('All activities classified! 🎉', style: TextStyle(fontSize: 20)),
-                 const SizedBox(height: 8),
-                Text("Check your Dashboard tab.", style: TextStyle(fontSize: 16, color: Colors.grey[400])),
-              ],
             ),
           );
         }
