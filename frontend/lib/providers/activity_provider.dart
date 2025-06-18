@@ -68,6 +68,30 @@ class ActivityProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> fetchUnclassifiedData() async {
+    // If already loading, don't start another request
+    if (_isLoading) return;
+    
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      _rawUnclassifiedSessions = await _apiService.getUnclassifiedSessions();
+      _groupAndSortSessions();
+    } catch (e) {
+      print("Error fetching unclassified data: $e");
+      _error = "Failed to load unclassified activities. Please try again.";
+      // Clear data on error to avoid showing stale info
+      _rawUnclassifiedSessions = [];
+      _groupedUnclassifiedSessions = {};
+      _unclassifiedDurationPerApp = {};
+    }
+
+    _isLoading = false;
+    notifyListeners();
+  }
+
   void _groupAndSortSessions() {
     _groupedUnclassifiedSessions = {};
     _unclassifiedDurationPerApp = {};

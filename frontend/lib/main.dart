@@ -50,6 +50,13 @@ class _MainScreenState extends State<MainScreen> {
     setState(() {
       _selectedIndex = index;
     });
+    
+    // Automatically fetch data when switching to the classify tab (index 1)
+    if (index == 1) {
+      final provider = Provider.of<ActivityProvider>(context, listen: false);
+      // Fetch unclassified data specifically for the classify tab
+      provider.fetchUnclassifiedData();
+    }
   }
 
   @override

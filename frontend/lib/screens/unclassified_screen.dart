@@ -61,7 +61,7 @@ class UnclassifiedScreen extends StatelessWidget {
                   Text(provider.error!, textAlign: TextAlign.center, style: const TextStyle(fontSize: 16)),
                   const SizedBox(height: 16),
                   ElevatedButton(
-                    onPressed: () => provider.fetchAllData(),
+                    onPressed: () => provider.fetchUnclassifiedData(),
                     child: const Text('Try Again'),
                   )
                 ],
@@ -73,7 +73,7 @@ class UnclassifiedScreen extends StatelessWidget {
         final sortedAppNames = provider.unclassifiedDurationPerApp.keys.toList();
 
         return RefreshIndicator(
-          onRefresh: () => provider.fetchAllData(),
+          onRefresh: () => provider.fetchUnclassifiedData(),
           child: ListView.builder(
             itemCount: sortedAppNames.length,
             itemBuilder: (context, index) {
