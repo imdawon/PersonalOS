@@ -74,14 +74,13 @@ func (s *DBStore) InsertRawEvent(event models.RawEvent) error {
 }
 
 // GetUnclassifiedSessions fetches distinct activities that haven't been labeled.
-// This is a simplified version for the API to prompt the user.
+// This returns individual sessions with their start and end times.
 func (s *DBStore) GetUnclassifiedSessions() ([]models.ActivitySession, error) {
 	rows, err := s.db.Query(`
-		SELECT app_name, window_title, SUM(duration_seconds) as total_duration
+		SELECT id, app_name, window_title, start_time, end_time, duration_seconds
 		FROM activity_sessions
 		WHERE classification_id IS NULL
-		GROUP BY app_name, window_title
-		ORDER BY total_duration DESC
+		ORDER BY start_time DESC
 	`)
 	if err != nil {
 		return nil, err
@@ -91,9 +90,12 @@ func (s *DBStore) GetUnclassifiedSessions() ([]models.ActivitySession, error) {
 	sessions := make([]models.ActivitySession, 0) // Initialize as empty slice, not nil
 	for rows.Next() {
 		var session models.ActivitySession
-		if err := rows.Scan(&session.AppName, &session.WindowTitle, &session.Duration); err != nil {
+		var startTimeUnix, endTimeUnix int64
+		if err := rows.Scan(&session.ID, &session.AppName, &session.WindowTitle, &startTimeUnix, &endTimeUnix, &session.Duration); err != nil {
 			return nil, err
 		}
+		session.StartTime = time.Unix(startTimeUnix, 0)
+		session.EndTime = time.Unix(endTimeUnix, 0)
 		sessions = append(sessions, session)
 	}
 	return sessions, nil
@@ -428,6 +430,7 @@ func (s *DBStore) DeleteClassificationRule(id int64) error {
 func (s *DBStore) GetRecentClassifiedSessions() ([]models.RecentActivityInfo, error) {
 	rows, err := s.db.Query(`
 		SELECT
+			s.id,
 			s.app_name,
 			s.window_title,
 			c.user_defined_name,
@@ -446,7 +449,7 @@ func (s *DBStore) GetRecentClassifiedSessions() ([]models.RecentActivityInfo, er
 	var activities []models.RecentActivityInfo
 	for rows.Next() {
 		var activity models.RecentActivityInfo
-		if err := rows.Scan(&activity.AppName, &activity.WindowTitle, &activity.UserDefinedName, &activity.StartTime); err != nil {
+		if err := rows.Scan(&activity.SessionID, &activity.AppName, &activity.WindowTitle, &activity.UserDefinedName, &activity.StartTime); err != nil {
 			return nil, err
 		}
 		// NOTE: is_auto is not yet implemented in the DB, defaulting to false for now.
@@ -459,4 +462,75 @@ func (s *DBStore) GetRecentClassifiedSessions() ([]models.RecentActivityInfo, er
 		return make([]models.RecentActivityInfo, 0), nil
 	}
 	return activities, nil
+}
+
+// ReclassifySession updates the classification of an existing session.
+func (s *DBStore) ReclassifySession(req models.ReclassifyRequest) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+
+	// 1. Find or create the classification
+	var classID int64
+	err = tx.QueryRow("SELECT id FROM classifications WHERE user_defined_name = ?", req.UserDefinedName).Scan(&classID)
+	if err == sql.ErrNoRows {
+		res, err := tx.Exec("INSERT INTO classifications (user_defined_name, is_helpful, goal_context) VALUES (?, ?, ?)",
+			req.UserDefinedName, req.IsHelpful, req.GoalContext)
+		if err != nil {
+			tx.Rollback()
+			return err
+		}
+		classID, _ = res.LastInsertId()
+	} else if err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	// 2. Update the specific session
+	_, err = tx.Exec(`
+		UPDATE activity_sessions
+		SET classification_id = ?
+		WHERE id = ?
+	`, classID, req.SessionID)
+
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	return tx.Commit()
+}
+
+// DeleteSession removes a session by its ID.
+func (s *DBStore) DeleteSession(sessionID int64) error {
+	_, err := s.db.Exec("DELETE FROM activity_sessions WHERE id = ?", sessionID)
+	return err
+}
+
+// GetExistingClassifications retrieves all existing classifications for dropdown options.
+func (s *DBStore) GetExistingClassifications() ([]models.ExistingClassification, error) {
+	rows, err := s.db.Query(`
+		SELECT DISTINCT user_defined_name, goal_context, is_helpful
+		FROM classifications
+		ORDER BY user_defined_name ASC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var classifications []models.ExistingClassification
+	for rows.Next() {
+		var classification models.ExistingClassification
+		if err := rows.Scan(&classification.UserDefinedName, &classification.GoalContext, &classification.IsHelpful); err != nil {
+			return nil, err
+		}
+		classifications = append(classifications, classification)
+	}
+
+	if classifications == nil {
+		return make([]models.ExistingClassification, 0), nil
+	}
+	return classifications, nil
 }

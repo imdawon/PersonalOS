@@ -15,6 +15,7 @@ class ActivityProvider with ChangeNotifier {
   List<TodaySummaryItem> _todaySummary = [];
   List<RuleInfo> _rules = [];
   List<RecentActivityInfo> _recentActivities = [];
+  List<ExistingClassification> _existingClassifications = [];
 
   bool _isLoading = false;
   String? _error;
@@ -25,6 +26,7 @@ class ActivityProvider with ChangeNotifier {
   List<TodaySummaryItem> get todaySummary => _todaySummary;
   List<RuleInfo> get rules => _rules;
   List<RecentActivityInfo> get recentActivities => _recentActivities;
+  List<ExistingClassification> get existingClassifications => _existingClassifications;
   bool get isLoading => _isLoading;
   String? get error => _error;
 
@@ -43,14 +45,16 @@ class ActivityProvider with ChangeNotifier {
       final summaryFuture = _apiService.getTodaySummary();
       final rulesFuture = _apiService.getClassificationRules();
       final recentFuture = _apiService.getRecentActivity();
+      final classificationsFuture = _apiService.getExistingClassifications();
 
-      final results = await Future.wait([unclassifiedFuture, summaryFuture, rulesFuture, recentFuture]);
+      final results = await Future.wait([unclassifiedFuture, summaryFuture, rulesFuture, recentFuture, classificationsFuture]);
       
       _rawUnclassifiedSessions = results[0] as List<ActivitySession>;
       _groupAndSortSessions();
       _todaySummary = results[1] as List<TodaySummaryItem>;
       _rules = results[2] as List<RuleInfo>;
       _recentActivities = results[3] as List<RecentActivityInfo>;
+      _existingClassifications = results[4] as List<ExistingClassification>;
 
     } catch (e) {
       print("Error fetching data: $e");
@@ -62,6 +66,7 @@ class ActivityProvider with ChangeNotifier {
       _todaySummary = [];
       _rules = [];
       _recentActivities = [];
+      _existingClassifications = [];
     }
 
     _isLoading = false;
@@ -107,9 +112,14 @@ class ActivityProvider with ChangeNotifier {
       );
     }
 
-    // Sort sessions within each app group by duration (descending)
+    // Sort sessions within each app group by start time (most recent first)
     _groupedUnclassifiedSessions.forEach((appName, sessions) {
-      sessions.sort((a, b) => b.duration.compareTo(a.duration));
+      sessions.sort((a, b) {
+        if (a.startTime != null && b.startTime != null) {
+          return b.startTime!.compareTo(a.startTime!);
+        }
+        return b.duration.compareTo(a.duration); // fallback to duration
+      });
     });
 
     // Sort app groups by total duration (descending)
@@ -227,6 +237,40 @@ class ActivityProvider with ChangeNotifier {
     } catch (e) {
       print("Error deleting rule: $e");
       _error = "Failed to delete the rule.";
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> reclassifySession(int sessionId, String userDefinedName, bool isHelpful, String goalContext) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      await _apiService.reclassifySession(sessionId, userDefinedName, isHelpful, goalContext);
+      await fetchAllData(); // Refresh all data to reflect the change
+    } catch (e) {
+      print("Error reclassifying session: $e");
+      _error = "Failed to reclassify the session.";
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> deleteSession(int sessionId) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      await _apiService.deleteSession(sessionId);
+      await fetchAllData(); // Refresh all data to reflect the change
+    } catch (e) {
+      print("Error deleting session: $e");
+      _error = "Failed to delete the session.";
     } finally {
       _isLoading = false;
       notifyListeners();

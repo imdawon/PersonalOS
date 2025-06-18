@@ -1,29 +1,27 @@
-// frontend/lib/widgets/classification_dialog.dart
 import 'package:flutter/material.dart';
-import 'package:PersonalOS/models/activity_session.dart'; // Keep this for type hint if needed
+import '../models/logbook_models.dart';
 import 'scrollable_fade_container.dart';
 
-class ClassificationDialog extends StatefulWidget {
-  // We don't strictly need the whole session object if we pass appName & windowTitle,
-  // but it's fine for now for single classifications.
-  final ActivitySession session;
-  final Function(String userDefinedName, bool isHelpful, String goalContext, bool createRule) onSave;
+class ReclassificationDialog extends StatefulWidget {
+  final String currentClassification;
+  final List<ExistingClassification> existingClassifications;
+  final Function(String userDefinedName, bool isHelpful, String goalContext, bool createRule) onReclassify;
 
-  const ClassificationDialog({
+  const ReclassificationDialog({
     super.key,
-    required this.session,
-    required this.onSave,
+    required this.currentClassification,
+    required this.existingClassifications,
+    required this.onReclassify,
   });
 
   @override
-  State<ClassificationDialog> createState() => _ClassificationDialogState();
+  State<ReclassificationDialog> createState() => _ReclassificationDialogState();
 }
 
-class _ClassificationDialogState extends State<ClassificationDialog> {
-  final _formKey = GlobalKey<FormState>();
+class _ReclassificationDialogState extends State<ReclassificationDialog> {
   late TextEditingController _customActivityController;
   
-  // Preset activity categories with icons
+  // Preset activity categories with icons (same as original dialog)
   static const List<Map<String, dynamic>> _presetActivities = [
     {'name': 'Programming', 'icon': '💻', 'context': 'Work'},
     {'name': 'Learning/Research', 'icon': '📚', 'context': 'Learn'},
@@ -48,39 +46,33 @@ class _ClassificationDialogState extends State<ClassificationDialog> {
     super.initState();
     _customActivityController = TextEditingController();
     
-    // Try to smart-suggest based on app name
-    _suggestActivityFromApp();
-  }
-
-  void _suggestActivityFromApp() {
-    final appName = widget.session.appName.toLowerCase();
-    final windowTitle = widget.session.windowTitle.toLowerCase();
+    // Pre-select the current classification
+    _selectedActivity = widget.currentClassification;
     
-    // Smart suggestions based on app patterns
-    if (appName.contains('code') || appName.contains('vscode') || 
-        appName.contains('intellij') || appName.contains('xcode') ||
-        windowTitle.contains('github') || windowTitle.contains('programming')) {
-      _selectedActivity = 'Programming';
-      _goalContext = 'Work';
-    } else if (appName.contains('chrome') || appName.contains('firefox') || 
-               appName.contains('safari') || appName.contains('browser')) {
-      if (windowTitle.contains('youtube') || windowTitle.contains('netflix') || 
-          windowTitle.contains('entertainment')) {
-        _selectedActivity = 'Entertainment';
-        _goalContext = 'Relax';
-      } else if (windowTitle.contains('facebook') || windowTitle.contains('twitter') || 
-                 windowTitle.contains('instagram') || windowTitle.contains('social')) {
-        _selectedActivity = 'Social Media';
-        _goalContext = 'Wasting Time';
-        _isHelpful = false;
+    // Find the current classification in existing ones to set context and helpful status
+    final existingMatch = widget.existingClassifications
+        .where((c) => c.userDefinedName == widget.currentClassification)
+        .firstOrNull;
+    
+    if (existingMatch != null) {
+      _isHelpful = existingMatch.isHelpful;
+      _goalContext = existingMatch.goalContext;
+      _isCustomActivity = false;
+    } else {
+      // Check if it's one of the preset activities
+      final presetMatch = _presetActivities
+          .where((activity) => activity['name'] == widget.currentClassification)
+          .firstOrNull;
+      
+      if (presetMatch != null) {
+        _goalContext = presetMatch['context'];
+        _isHelpful = presetMatch['context'] != 'Wasting Time';
+        _isCustomActivity = false;
       } else {
-        _selectedActivity = 'Browsing';
-        _goalContext = 'Personal';
+        // It's a custom activity
+        _customActivityController.text = widget.currentClassification;
+        _isCustomActivity = true;
       }
-    } else if (appName.contains('slack') || appName.contains('teams') || 
-               appName.contains('discord') || appName.contains('mail')) {
-      _selectedActivity = 'Communication';
-      _goalContext = 'Work';
     }
   }
 
@@ -88,14 +80,6 @@ class _ClassificationDialogState extends State<ClassificationDialog> {
   void dispose() {
     _customActivityController.dispose();
     super.dispose();
-  }
-
-  String _getActivityIcon(String activityName) {
-    final preset = _presetActivities.firstWhere(
-      (activity) => activity['name'] == activityName,
-      orElse: () => {'icon': '📝'},
-    );
-    return preset['icon'] ?? '📝';
   }
 
   Color _getGoalContextColor(String context) {
@@ -110,13 +94,12 @@ class _ClassificationDialogState extends State<ClassificationDialog> {
     }
   }
 
-  void _selectActivity(String activityName, String defaultContext) {
+  void _selectActivity(String activityName, String defaultContext, bool defaultHelpful) {
     setState(() {
       _selectedActivity = activityName;
       _isCustomActivity = false;
       _goalContext = defaultContext;
-      // Smart default for helpfulness
-      _isHelpful = defaultContext != 'Wasting Time';
+      _isHelpful = defaultHelpful;
     });
   }
 
@@ -148,8 +131,8 @@ class _ClassificationDialogState extends State<ClassificationDialog> {
       finalActivityName = _selectedActivity!;
     }
 
-         widget.onSave(finalActivityName, _isHelpful, _goalContext, _createRule);
-     Navigator.of(context).pop();
+    widget.onReclassify(finalActivityName, _isHelpful, _goalContext, _createRule);
+    Navigator.of(context).pop();
   }
 
   @override
@@ -167,10 +150,10 @@ class _ClassificationDialogState extends State<ClassificationDialog> {
               padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
               child: Row(
                 children: [
-                  const Text('🔖', style: TextStyle(fontSize: 24)),
+                  const Text('🔄', style: TextStyle(fontSize: 24)),
                   const SizedBox(width: 8),
                   const Text(
-                    'Classify Activity',
+                    'Reclassify Activity',
                     style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                   ),
                   const Spacer(),
@@ -188,69 +171,25 @@ class _ClassificationDialogState extends State<ClassificationDialog> {
                   padding: const EdgeInsets.all(24),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-            
-            // App and Window Info Card
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Theme.of(context).cardColor,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.grey.withOpacity(0.3)),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).primaryColor.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      widget.session.appName.isNotEmpty 
-                        ? widget.session.appName.substring(0, 1).toUpperCase()
-                        : '?',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Theme.of(context).primaryColor,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          widget.session.appName,
-                          style: const TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        if (widget.session.windowTitle.isNotEmpty)
-                          Text(
-                            widget.session.windowTitle,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey[400],
-                            ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                      ],
-                    ),
-                  ),
-                ],
+                                     children: [
+            Text(
+              'Currently: ${widget.currentClassification}',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey[600],
+                fontWeight: FontWeight.w500,
               ),
             ),
             
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
             
-            // Activity Selection
-            Row(
+            // Activity Selection Header
+            const Row(
               children: [
-                const Text('📂', style: TextStyle(fontSize: 18)),
-                const SizedBox(width: 8),
-                const Text(
-                  'What were you doing?',
+                Text('🔖', style: TextStyle(fontSize: 18)),
+                SizedBox(width: 8),
+                Text(
+                  'Select Activity',
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                 ),
               ],
@@ -258,19 +197,72 @@ class _ClassificationDialogState extends State<ClassificationDialog> {
             
             const SizedBox(height: 12),
             
-                         // Activity Grid
-             Container(
-               constraints: const BoxConstraints(maxHeight: 150),
+            // Activity Grid
+            Container(
+              constraints: const BoxConstraints(maxHeight: 200),
               child: SingleChildScrollView(
                 child: Wrap(
                   spacing: 8,
                   runSpacing: 8,
                   children: [
-                    // Preset activities
-                    ..._presetActivities.map((activity) {
+                    // Existing classifications first (if any)
+                    ...widget.existingClassifications.map((classification) {
+                      final isSelected = _selectedActivity == classification.userDefinedName;
+                      // Try to find an icon from presets, otherwise use default
+                      final presetMatch = _presetActivities
+                          .where((activity) => activity['name'] == classification.userDefinedName)
+                          .firstOrNull;
+                      final icon = presetMatch?['icon'] ?? '📝';
+                      
+                      return GestureDetector(
+                        onTap: () => _selectActivity(
+                          classification.userDefinedName, 
+                          classification.goalContext,
+                          classification.isHelpful,
+                        ),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: isSelected 
+                              ? Theme.of(context).primaryColor.withOpacity(0.2)
+                              : Theme.of(context).cardColor,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: isSelected 
+                                ? Theme.of(context).primaryColor
+                                : Colors.grey.withOpacity(0.3),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(icon, style: const TextStyle(fontSize: 16)),
+                              const SizedBox(width: 6),
+                              Text(
+                                classification.userDefinedName,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                    
+                    // Preset activities (only show ones not already in existing classifications)
+                    ..._presetActivities.where((activity) {
+                      return !widget.existingClassifications
+                          .any((existing) => existing.userDefinedName == activity['name']);
+                    }).map((activity) {
                       final isSelected = _selectedActivity == activity['name'];
                       return GestureDetector(
-                        onTap: () => _selectActivity(activity['name'], activity['context']),
+                        onTap: () => _selectActivity(
+                          activity['name'], 
+                          activity['context'],
+                          activity['context'] != 'Wasting Time',
+                        ),
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                           decoration: BoxDecoration(
@@ -353,11 +345,11 @@ class _ClassificationDialogState extends State<ClassificationDialog> {
             const SizedBox(height: 20),
             
             // Goal Context
-            Row(
+            const Row(
               children: [
-                const Text('🎯', style: TextStyle(fontSize: 18)),
-                const SizedBox(width: 8),
-                const Text(
+                Text('🎯', style: TextStyle(fontSize: 18)),
+                SizedBox(width: 8),
+                Text(
                   'Goal Context',
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                 ),
@@ -409,11 +401,11 @@ class _ClassificationDialogState extends State<ClassificationDialog> {
             const SizedBox(height: 20),
             
             // Goal Progress Question
-            Row(
+            const Row(
               children: [
-                const Text('🚀', style: TextStyle(fontSize: 18)),
-                const SizedBox(width: 8),
-                const Expanded(
+                Text('🚀', style: TextStyle(fontSize: 18)),
+                SizedBox(width: 8),
+                Expanded(
                   child: Text(
                     'Is this moving you towards your goals?',
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
@@ -442,88 +434,62 @@ class _ClassificationDialogState extends State<ClassificationDialog> {
               ],
             ),
             
-            const SizedBox(height: 16),
-            
-            // Automation Rule
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Theme.of(context).cardColor.withOpacity(0.5),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.grey.withOpacity(0.3)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Text('🤖', style: TextStyle(fontSize: 16)),
-                      const SizedBox(width: 8),
-                      const Text(
-                        'Auto-classify similar activities?',
-                        style: TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      const Spacer(),
-                      Switch(
-                        value: _createRule,
-                        onChanged: (value) => setState(() => _createRule = value),
-                      ),
-                    ],
-                  ),
-                  if (_createRule) ...[
-                    const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).primaryColor.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.info_outline, size: 16),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'Will auto-classify when app is "${widget.session.appName}"${widget.session.windowTitle.isNotEmpty ? ' and window title contains similar text' : ''}',
-                              style: const TextStyle(fontSize: 12),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            
             const SizedBox(height: 24),
             
-            // Action Buttons
+            // Create Automation Rule
+            const Row(
+              children: [
+                Text('🤖', style: TextStyle(fontSize: 18)),
+                SizedBox(width: 8),
+                Text(
+                  'Create Automation Rule',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
+            
+            const SizedBox(height: 8),
+            
             Row(
               children: [
-                Expanded(
-                  child: TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('Cancel'),
-                  ),
+                Checkbox(
+                  value: _createRule,
+                  onChanged: (value) => setState(() => _createRule = value!),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: _submitForm,
-                    child: const Text('Save'),
+                const Expanded(
+                  child: Text(
+                    'Automatically classify similar activities in the future',
+                    style: TextStyle(fontSize: 14),
                   ),
                 ),
               ],
             ),
-                  ],
-                  ),
+            
+            const SizedBox(height: 24),
+            
+            // Action buttons
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Cancel'),
                 ),
-              ),
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  onPressed: _submitForm,
+                  child: const Text('Update Classification'),
+                ),
+              ],
             ),
-          ],
-        ),
-      ),
-    );
-  }
-}
+                   ],
+                   ),
+                 ),
+               ),
+             ),
+           ],
+         ),
+       ),
+     );
+   }
+ } 

@@ -26,6 +26,9 @@ func (s *Server) Start(addr string) {
 	mux.HandleFunc("/api/v0/unclassified-sessions", s.handleGetUnclassified)
 	mux.HandleFunc("/api/v0/classify", s.handleClassify)
 	mux.HandleFunc("/api/v0/classify-batch", s.handleClassifyBatch)
+	mux.HandleFunc("/api/v0/reclassify", s.handleReclassify)
+	mux.HandleFunc("/api/v0/delete-session", s.handleDeleteSession)
+	mux.HandleFunc("/api/v0/classifications", s.handleGetClassifications)
 	mux.HandleFunc("/api/v0/today-summary", s.handleGetTodaySummary)
 	mux.HandleFunc("/api/v0/rules", s.handleRules)
 	mux.HandleFunc("/api/v0/recent-activity", s.handleGetRecentActivity)
@@ -81,6 +84,60 @@ func (s *Server) handleClassifyBatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.respondJSON(w, http.StatusOK, map[string]string{"status": "success"})
+}
+
+func (s *Server) handleReclassify(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Only POST method is allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req models.ReclassifyRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if err := s.store.ReclassifySession(req); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	s.respondJSON(w, http.StatusOK, map[string]string{"status": "success"})
+}
+
+func (s *Server) handleDeleteSession(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		http.Error(w, "Only DELETE method is allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	sessionIDStr := r.URL.Query().Get("id")
+	if sessionIDStr == "" {
+		http.Error(w, "Missing session ID", http.StatusBadRequest)
+		return
+	}
+	sessionID, err := strconv.ParseInt(sessionIDStr, 10, 64)
+	if err != nil {
+		http.Error(w, "Invalid session ID", http.StatusBadRequest)
+		return
+	}
+
+	if err := s.store.DeleteSession(sessionID); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	s.respondJSON(w, http.StatusOK, map[string]string{"status": "session deleted"})
+}
+
+func (s *Server) handleGetClassifications(w http.ResponseWriter, r *http.Request) {
+	classifications, err := s.store.GetExistingClassifications()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	s.respondJSON(w, http.StatusOK, classifications)
 }
 
 func (s *Server) handleRules(w http.ResponseWriter, r *http.Request) {

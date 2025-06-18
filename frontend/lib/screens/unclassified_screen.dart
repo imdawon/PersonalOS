@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:PersonalOS/models/classification_request.dart';
+import 'package:PersonalOS/models/activity_session.dart';
 import 'package:PersonalOS/widgets/classification_dialog.dart';
 import 'package:PersonalOS/widgets/classification_dialog_for_group.dart';
 import 'package:provider/provider.dart';
 import '../providers/activity_provider.dart';
+import 'package:intl/intl.dart';
 
 class UnclassifiedScreen extends StatelessWidget {
   const UnclassifiedScreen({super.key});
@@ -20,6 +22,16 @@ class UnclassifiedScreen extends StatelessWidget {
       return "${duration.inMinutes}m";
     } else {
       return "${duration.inSeconds}s";
+    }
+  }
+
+  String _formatTimeRange(ActivitySession session) {
+    if (session.startTime != null && session.endTime != null) {
+      final startTime = DateFormat.jm().format(session.startTime!);
+      final endTime = DateFormat.jm().format(session.endTime!);
+      return "$startTime - $endTime (${_formatDuration(session.duration)})";
+    } else {
+      return "Duration: ${_formatDuration(session.duration)}";
     }
   }
 
@@ -133,7 +145,7 @@ class UnclassifiedScreen extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                       trailing: Text(
-                        _formatDuration(session.duration),
+                        _formatTimeRange(session),
                         style: TextStyle(fontSize: 12.5, color: Colors.grey[500]),
                       ),
                       onTap: () {

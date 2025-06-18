@@ -91,4 +91,38 @@ class ApiService {
       throw Exception('Failed to load recent activity');
     }
   }
+
+  Future<void> reclassifySession(int sessionId, String userDefinedName, bool isHelpful, String goalContext) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/reclassify'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({
+        'session_id': sessionId,
+        'user_defined_name': userDefinedName,
+        'is_helpful': isHelpful,
+        'goal_context': goalContext,
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to reclassify session');
+    }
+  }
+
+  Future<void> deleteSession(int sessionId) async {
+    final response = await http.delete(Uri.parse('$_baseUrl/delete-session?id=$sessionId'));
+    if (response.statusCode != 200) {
+      throw Exception('Failed to delete session');
+    }
+  }
+
+  Future<List<ExistingClassification>> getExistingClassifications() async {
+    final response = await http.get(Uri.parse('$_baseUrl/classifications'));
+    if (response.statusCode == 200) {
+      List<dynamic> body = json.decode(response.body);
+      return body.map((dynamic item) => ExistingClassification.fromJson(item)).toList();
+    } else {
+      throw Exception('Failed to load existing classifications');
+    }
+  }
 }

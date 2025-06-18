@@ -1,6 +1,9 @@
 package models
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 // RawEvent is a single data point captured by the tracker.
 type RawEvent struct {
@@ -14,10 +17,24 @@ type ActivitySession struct {
 	ID               int64     `json:"id"`
 	AppName          string    `json:"app_name"`
 	WindowTitle      string    `json:"window_title"`
-	StartTime        time.Time `json:"start_time"`
-	EndTime          time.Time `json:"end_time"`
+	StartTime        time.Time `json:"-"`
+	EndTime          time.Time `json:"-"`
 	Duration         int64     `json:"duration_seconds"` // Duration in seconds
 	ClassificationID *int64    `json:"classification_id,omitempty"`
+}
+
+// MarshalJSON ensures StartTime and EndTime are sent as Unix timestamps (int)
+func (s ActivitySession) MarshalJSON() ([]byte, error) {
+	type Alias ActivitySession
+	return json.Marshal(&struct {
+		StartTime int64 `json:"start_time"`
+		EndTime   int64 `json:"end_time"`
+		*Alias
+	}{
+		StartTime: s.StartTime.Unix(),
+		EndTime:   s.EndTime.Unix(),
+		Alias:     (*Alias)(&s),
+	})
 }
 
 // Classification is a user-defined label for an activity.
@@ -79,9 +96,25 @@ type RuleInfo struct {
 
 // RecentActivityInfo is a model for a recently classified session.
 type RecentActivityInfo struct {
+	SessionID       int64  `json:"session_id"`
 	AppName         string `json:"app_name"`
 	WindowTitle     string `json:"window_title"`
 	UserDefinedName string `json:"user_defined_name"`
 	StartTime       int64  `json:"start_time"`
 	IsAuto          bool   `json:"is_auto"`
+}
+
+// ReclassifyRequest is used to update the classification of an existing session.
+type ReclassifyRequest struct {
+	SessionID       int64  `json:"session_id"`
+	UserDefinedName string `json:"user_defined_name"`
+	IsHelpful       bool   `json:"is_helpful"`
+	GoalContext     string `json:"goal_context"`
+}
+
+// ExistingClassification represents an existing classification for dropdown options.
+type ExistingClassification struct {
+	UserDefinedName string `json:"user_defined_name"`
+	GoalContext     string `json:"goal_context"`
+	IsHelpful       bool   `json:"is_helpful"`
 }
