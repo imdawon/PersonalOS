@@ -4,6 +4,7 @@ import '../models/classification_request.dart';
 import '../models/today_summary.dart';
 import '../models/logbook_models.dart';
 import '../services/api_service.dart';
+import 'dart:async';
 
 class ActivityProvider with ChangeNotifier {
   final ApiService _apiService = ApiService();
@@ -20,6 +21,11 @@ class ActivityProvider with ChangeNotifier {
   bool _isLoading = false;
   String? _error;
 
+  // Polling related fields
+  Timer? _pollingTimer;
+  bool _isPollingActive = false;
+  static const Duration _pollingInterval = Duration(minutes: 1);
+
   // Getters
   Map<String, List<ActivitySession>> get groupedUnclassifiedSessions => _groupedUnclassifiedSessions;
   Map<String, int> get unclassifiedDurationPerApp => _unclassifiedDurationPerApp;
@@ -29,9 +35,85 @@ class ActivityProvider with ChangeNotifier {
   List<ExistingClassification> get existingClassifications => _existingClassifications;
   bool get isLoading => _isLoading;
   String? get error => _error;
+  bool get isPollingActive => _isPollingActive;
 
   ActivityProvider() {
     fetchAllData();
+  }
+
+  // Start polling for unclassified data
+  void startPolling() {
+    if (_isPollingActive) return;
+    
+    _isPollingActive = true;
+    _pollingTimer = Timer.periodic(_pollingInterval, (timer) {
+      // Only poll if we're not currently loading to avoid overlapping requests
+      if (!_isLoading) {
+        _fetchUnclassifiedDataSilently();
+      }
+    });
+    
+    print("Started polling for unclassified data every ${_pollingInterval.inMinutes} minute(s)");
+  }
+
+  // Stop polling for unclassified data
+  void stopPolling() {
+    if (!_isPollingActive) return;
+    
+    _pollingTimer?.cancel();
+    _pollingTimer = null;
+    _isPollingActive = false;
+    
+    print("Stopped polling for unclassified data");
+  }
+
+  // Fetch unclassified data silently (without showing loading indicators)
+  Future<void> _fetchUnclassifiedDataSilently() async {
+    try {
+      final newUnclassifiedSessions = await _apiService.getUnclassifiedSessions();
+      
+      // Check if the data has actually changed before updating
+      if (_hasUnclassifiedDataChanged(newUnclassifiedSessions)) {
+        _rawUnclassifiedSessions = newUnclassifiedSessions;
+        _groupAndSortSessions();
+        _error = null; // Clear any previous errors
+        notifyListeners();
+        print("Unclassified data updated via polling");
+      }
+    } catch (e) {
+      // Log the error but don't update the UI for silent polling errors
+      // This prevents disrupting the user experience with network errors during background polling
+      print("Silent polling error (data not updated): $e");
+    }
+  }
+
+  // Check if unclassified data has changed
+  bool _hasUnclassifiedDataChanged(List<ActivitySession> newSessions) {
+    if (_rawUnclassifiedSessions.length != newSessions.length) {
+      return true;
+    }
+    
+    // Compare session IDs or timestamps to detect changes
+    for (int i = 0; i < _rawUnclassifiedSessions.length; i++) {
+      final oldSession = _rawUnclassifiedSessions[i];
+      final newSession = newSessions[i];
+      
+      if (oldSession.appName != newSession.appName ||
+          oldSession.windowTitle != newSession.windowTitle ||
+          oldSession.duration != newSession.duration ||
+          oldSession.startTime != newSession.startTime ||
+          oldSession.endTime != newSession.endTime) {
+        return true;
+      }
+    }
+    
+    return false;
+  }
+
+  @override
+  void dispose() {
+    stopPolling();
+    super.dispose();
   }
 
   Future<void> fetchAllData() async {
