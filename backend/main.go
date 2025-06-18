@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -15,10 +16,11 @@ import (
 )
 
 const (
-	dbPath             = "personal_os.db"
-	trackingInterval   = 5 * time.Second
-	processingInterval = 1 * time.Minute
-	apiAddr            = "localhost:8085"
+	dbPath                 = "personal_os.db"
+	activeTrackingInterval = 5 * time.Second  // Fast polling when active
+	pausedTrackingInterval = 30 * time.Second // Slow polling when locked/sleeping (battery conservation)
+	processingInterval     = 1 * time.Minute
+	apiAddr                = "localhost:8085"
 )
 
 func main() {
@@ -39,10 +41,10 @@ func main() {
 	log.Println("Activity tracker initialized.")
 
 	// 3. Start the continuous logger (the "eye")
-	go startLogger(activityTracker, store)
+	proc := processor.NewProcessor(store, processingInterval)
+	go startLogger(activityTracker, store, proc)
 
 	// 4. Start the Processor
-	proc := processor.NewProcessor(store, processingInterval)
 	proc.Start()
 
 	// 5. Start the API Server
@@ -54,24 +56,57 @@ func main() {
 	log.Println("Personal OS Backend shut down gracefully.")
 }
 
-// startLogger is the core loop that gets activity and logs it.
-func startLogger(t tracker.Tracker, s *storage.DBStore) {
-	ticker := time.NewTicker(trackingInterval)
-	defer ticker.Stop()
-
+// startLogger is the core loop that gets activity and logs it with dynamic polling intervals.
+func startLogger(t tracker.Tracker, s *storage.DBStore, proc *processor.Processor) {
 	log.Println("Logger started. Tracking activity...")
 
 	var lastPowerStateLog time.Time
 	var isCurrentlyPaused bool
+	var currentInterval = activeTrackingInterval
 
-	for range ticker.C {
+	// Use a channel-based approach for dynamic interval switching
+	tickerChan := make(chan time.Time)
+	var ticker *time.Ticker
+
+	// Function to start/restart ticker with new interval
+	startTicker := func(interval time.Duration) {
+		if ticker != nil {
+			ticker.Stop()
+		}
+		ticker = time.NewTicker(interval)
+		go func() {
+			for t := range ticker.C {
+				tickerChan <- t
+			}
+		}()
+	}
+
+	// Start with active tracking interval
+	startTicker(activeTrackingInterval)
+	defer func() {
+		if ticker != nil {
+			ticker.Stop()
+		}
+	}()
+
+	for range tickerChan {
 		activity, err := t.GetActivity()
 		if err != nil {
 			// Check if this is a power state related error (tracking paused)
 			if isPowerStateError(err) {
 				if !isCurrentlyPaused {
-					log.Printf("Not Paused: Tracking paused: %v", err)
+					log.Printf("Tracking paused: %v", err)
+					log.Printf("Switching to battery conservation mode (polling every %v)", pausedTrackingInterval)
 					isCurrentlyPaused = true
+
+					// Pause the processor - no need to process when no activity is being tracked
+					proc.Pause()
+
+					// Switch to slower polling interval to conserve battery
+					if currentInterval != pausedTrackingInterval {
+						currentInterval = pausedTrackingInterval
+						startTicker(pausedTrackingInterval)
+					}
 				}
 				continue
 			}
@@ -81,10 +116,20 @@ func startLogger(t tracker.Tracker, s *storage.DBStore) {
 			continue
 		}
 
-		// If we were previously paused, log that tracking has resumed
+		// If we were previously paused, log that tracking has resumed and switch back to fast polling
 		if isCurrentlyPaused {
 			log.Println("Tracking resumed - system is active")
+			log.Printf("Switching back to active tracking mode (polling every %v)", activeTrackingInterval)
 			isCurrentlyPaused = false
+
+			// Resume the processor - start processing accumulated events
+			proc.Resume()
+
+			// Switch back to faster polling interval
+			if currentInterval != activeTrackingInterval {
+				currentInterval = activeTrackingInterval
+				startTicker(activeTrackingInterval)
+			}
 		}
 
 		if activity.AppName != "" {
@@ -112,7 +157,11 @@ func startLogger(t tracker.Tracker, s *storage.DBStore) {
 
 // isPowerStateError checks if the error is related to power state (tracking paused)
 func isPowerStateError(err error) bool {
-	return err != nil && (err.Error()[:15] == "tracking paused:")
+	if err == nil {
+		return false
+	}
+	errMsg := err.Error()
+	return strings.Contains(errMsg, "tracking paused:")
 }
 
 // waitForShutdown handles graceful shutdown on interrupt signals.
