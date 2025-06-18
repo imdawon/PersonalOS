@@ -60,11 +60,31 @@ func startLogger(t tracker.Tracker, s *storage.DBStore) {
 	defer ticker.Stop()
 
 	log.Println("Logger started. Tracking activity...")
+
+	var lastPowerStateLog time.Time
+	var isCurrentlyPaused bool
+
 	for range ticker.C {
 		activity, err := t.GetActivity()
 		if err != nil {
+			// Check if this is a power state related error (tracking paused)
+			if isPowerStateError(err) {
+				if !isCurrentlyPaused {
+					log.Printf("Not Paused: Tracking paused: %v", err)
+					isCurrentlyPaused = true
+				}
+				continue
+			}
+
+			// Log other errors but continue tracking
 			log.Printf("Error getting activity: %v", err)
 			continue
+		}
+
+		// If we were previously paused, log that tracking has resumed
+		if isCurrentlyPaused {
+			log.Println("Tracking resumed - system is active")
+			isCurrentlyPaused = false
 		}
 
 		if activity.AppName != "" {
@@ -78,7 +98,21 @@ func startLogger(t tracker.Tracker, s *storage.DBStore) {
 			}
 			log.Printf("Logged Raw Event: %s - %s", activity.AppName, activity.WindowTitle)
 		}
+
+		// Log power state information periodically (every 5 minutes)
+		if time.Since(lastPowerStateLog) > 5*time.Minute {
+			if powerState, err := t.GetPowerState(); err == nil {
+				log.Printf("Power State - Sleeping: %v, Locked: %v, DisplaySleep: %v, Idle: %v",
+					powerState.IsSleeping, powerState.IsLocked, powerState.IsDisplaySleep, powerState.IsIdle)
+				lastPowerStateLog = time.Now()
+			}
+		}
 	}
+}
+
+// isPowerStateError checks if the error is related to power state (tracking paused)
+func isPowerStateError(err error) bool {
+	return err != nil && (err.Error()[:15] == "tracking paused:")
 }
 
 // waitForShutdown handles graceful shutdown on interrupt signals.
