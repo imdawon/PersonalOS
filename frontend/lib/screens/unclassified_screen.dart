@@ -142,15 +142,29 @@ class UnclassifiedScreen extends StatelessWidget {
                           builder: (BuildContext dialogContext) {
                             return ClassificationDialog(
                               session: session,
-                              onSave: (String userDefinedName, bool isHelpful, String goalContext) {
-                                final request = ClassificationRequest(
-                                  appName: session.appName,
-                                  windowTitle: session.windowTitle,
-                                  userDefinedName: userDefinedName,
-                                  isHelpful: isHelpful,
-                                  goalContext: goalContext,
-                                );
-                                Provider.of<ActivityProvider>(context, listen: false).classifySingleSession(request);
+                              onSave: (String userDefinedName, bool isHelpful, String goalContext, bool createRule) {
+                                final provider = Provider.of<ActivityProvider>(context, listen: false);
+                                
+                                if (createRule) {
+                                  // Create rule with window title pattern
+                                  provider.createRuleAndClassifyAppGroup(
+                                    appName: session.appName,
+                                    windowTitleContains: session.windowTitle.isNotEmpty ? session.windowTitle : '',
+                                    userDefinedName: userDefinedName,
+                                    isHelpful: isHelpful,
+                                    goalContext: goalContext,
+                                  );
+                                } else {
+                                  // Just classify this single session
+                                  final request = ClassificationRequest(
+                                    appName: session.appName,
+                                    windowTitle: session.windowTitle,
+                                    userDefinedName: userDefinedName,
+                                    isHelpful: isHelpful,
+                                    goalContext: goalContext,
+                                  );
+                                  provider.classifySingleSession(request);
+                                }
                               },
                             );
                           },
