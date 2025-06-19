@@ -32,6 +32,7 @@ func (s *Server) Start(addr string) {
 	mux.HandleFunc("/api/v0/today-summary", s.handleGetTodaySummary)
 	mux.HandleFunc("/api/v0/rules", s.handleRules)
 	mux.HandleFunc("/api/v0/recent-activity", s.handleGetRecentActivity)
+	mux.HandleFunc("/api/v0/skills", s.handleGetSkills)
 
 	log.Printf("API server listening on %s", addr)
 	if err := http.ListenAndServe(addr, mux); err != nil {
@@ -215,6 +216,15 @@ func (s *Server) handleGetRecentActivity(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	s.respondJSON(w, http.StatusOK, activities)
+}
+
+func (s *Server) handleGetSkills(w http.ResponseWriter, r *http.Request) {
+	skills, err := s.store.GetSkillProgress()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	s.respondJSON(w, http.StatusOK, skills)
 }
 
 func (s *Server) respondJSON(w http.ResponseWriter, status int, payload interface{}) {

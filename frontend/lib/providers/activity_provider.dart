@@ -5,6 +5,7 @@ import '../models/today_summary.dart';
 import '../models/logbook_models.dart';
 import '../services/api_service.dart';
 import 'dart:async';
+import '../models/skill_progress.dart';
 
 class ActivityProvider with ChangeNotifier {
   final ApiService _apiService = ApiService();
@@ -17,6 +18,7 @@ class ActivityProvider with ChangeNotifier {
   List<RuleInfo> _rules = [];
   List<RecentActivityInfo> _recentActivities = [];
   List<ExistingClassification> _existingClassifications = [];
+  List<SkillProgress> _skills = [];
 
   bool _isLoading = false;
   String? _error;
@@ -24,7 +26,7 @@ class ActivityProvider with ChangeNotifier {
   // Polling related fields
   Timer? _pollingTimer;
   bool _isPollingActive = false;
-  static const Duration _pollingInterval = Duration(minutes: 1);
+  static const Duration _pollingInterval = Duration(seconds: 5);
 
   // Getters
   Map<String, List<ActivitySession>> get groupedUnclassifiedSessions => _groupedUnclassifiedSessions;
@@ -33,6 +35,7 @@ class ActivityProvider with ChangeNotifier {
   List<RuleInfo> get rules => _rules;
   List<RecentActivityInfo> get recentActivities => _recentActivities;
   List<ExistingClassification> get existingClassifications => _existingClassifications;
+  List<SkillProgress> get skills => _skills;
   bool get isLoading => _isLoading;
   String? get error => _error;
   bool get isPollingActive => _isPollingActive;
@@ -44,27 +47,31 @@ class ActivityProvider with ChangeNotifier {
   // Start polling for unclassified data
   void startPolling() {
     if (_isPollingActive) return;
-    
+
     _isPollingActive = true;
+    notifyListeners(); // Optimistically update UI
     _pollingTimer = Timer.periodic(_pollingInterval, (timer) {
       // Only poll if we're not currently loading to avoid overlapping requests
       if (!_isLoading) {
         _fetchUnclassifiedDataSilently();
       }
     });
-    
-    print("Started polling for unclassified data every ${_pollingInterval.inMinutes} minute(s)");
   }
 
   // Stop polling for unclassified data
   void stopPolling() {
     if (!_isPollingActive) return;
-    
+
     _pollingTimer?.cancel();
     _pollingTimer = null;
     _isPollingActive = false;
-    
-    print("Stopped polling for unclassified data");
+
+    // Defer the notification to prevent calling it while the widget tree is locked.
+    Future.microtask(() {
+      if (!_isPollingActive && _pollingTimer == null) {
+        notifyListeners();
+      }
+    });
   }
 
   // Fetch unclassified data silently (without showing loading indicators)
@@ -78,12 +85,10 @@ class ActivityProvider with ChangeNotifier {
         _groupAndSortSessions();
         _error = null; // Clear any previous errors
         notifyListeners();
-        print("Unclassified data updated via polling");
       }
     } catch (e) {
       // Log the error but don't update the UI for silent polling errors
       // This prevents disrupting the user experience with network errors during background polling
-      print("Silent polling error (data not updated): $e");
     }
   }
 
@@ -128,8 +133,9 @@ class ActivityProvider with ChangeNotifier {
       final rulesFuture = _apiService.getClassificationRules();
       final recentFuture = _apiService.getRecentActivity();
       final classificationsFuture = _apiService.getExistingClassifications();
+      final skillsFuture = _apiService.getSkills();
 
-      final results = await Future.wait([unclassifiedFuture, summaryFuture, rulesFuture, recentFuture, classificationsFuture]);
+      final results = await Future.wait([unclassifiedFuture, summaryFuture, rulesFuture, recentFuture, classificationsFuture, skillsFuture]);
       
       _rawUnclassifiedSessions = results[0] as List<ActivitySession>;
       _groupAndSortSessions();
@@ -137,6 +143,7 @@ class ActivityProvider with ChangeNotifier {
       _rules = results[2] as List<RuleInfo>;
       _recentActivities = results[3] as List<RecentActivityInfo>;
       _existingClassifications = results[4] as List<ExistingClassification>;
+      _skills = results[5] as List<SkillProgress>;
 
     } catch (e) {
       print("Error fetching data: $e");
@@ -149,6 +156,7 @@ class ActivityProvider with ChangeNotifier {
       _rules = [];
       _recentActivities = [];
       _existingClassifications = [];
+      _skills = [];
     }
 
     _isLoading = false;

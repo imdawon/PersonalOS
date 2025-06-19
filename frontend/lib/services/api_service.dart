@@ -4,6 +4,7 @@ import '../models/activity_session.dart';
 import '../models/classification_request.dart';
 import '../models/today_summary.dart';
 import '../models/logbook_models.dart';
+import '../models/skill_progress.dart';
 
 class ApiService {
   final String _baseUrl = "http://127.0.0.1:8085/api/v0";
@@ -123,6 +124,16 @@ class ApiService {
       return body.map((dynamic item) => ExistingClassification.fromJson(item)).toList();
     } else {
       throw Exception('Failed to load existing classifications');
+    }
+  }
+
+  Future<List<SkillProgress>> getSkills() async {
+    final response = await http.get(Uri.parse('$_baseUrl/skills'));
+    if (response.statusCode == 200) {
+      List<dynamic> body = json.decode(response.body);
+      return body.map((dynamic item) => SkillProgress.fromJson(item)).toList();
+    } else {
+      throw Exception('Failed to load skills');
     }
   }
 }

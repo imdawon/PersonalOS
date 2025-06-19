@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"math"
 	"strings"
 	"time"
 
@@ -533,4 +534,68 @@ func (s *DBStore) GetExistingClassifications() ([]models.ExistingClassification,
 		return make([]models.ExistingClassification, 0), nil
 	}
 	return classifications, nil
+}
+
+// computeLevel calculates the level, current XP within the level, and XP required for the next level
+// based on the total accumulated XP. The formula is:
+//
+//	XP for next level = baseXP * level^1.5
+//
+// where baseXP is 100. The function starts at level 1.
+func computeLevel(totalXP int64) (level int, currentXP int64, xpForNextLevel int64) {
+	const baseXP = 100.0
+	level = 1
+	xpForNextLevel = int64(baseXP)
+	xpRemaining := totalXP
+
+	for xpRemaining >= xpForNextLevel {
+		xpRemaining -= xpForNextLevel
+		level++
+		xpForNextLevel = int64(baseXP * math.Pow(float64(level), 1.5))
+	}
+
+	currentXP = xpRemaining
+	return
+}
+
+// GetSkillProgress aggregates all classified activity and returns the XP/level progress per skill (classification).
+// XP is calculated as 1 XP per minute of classified time.
+func (s *DBStore) GetSkillProgress() ([]models.SkillProgress, error) {
+	rows, err := s.db.Query(`
+		SELECT c.user_defined_name, SUM(s.duration_seconds) as total_duration
+		FROM activity_sessions s
+		JOIN classifications c ON s.classification_id = c.id
+		GROUP BY c.user_defined_name
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	skills := make([]models.SkillProgress, 0)
+
+	for rows.Next() {
+		var name string
+		var totalSeconds int64
+		if err := rows.Scan(&name, &totalSeconds); err != nil {
+			return nil, err
+		}
+
+		// XP conversion: 1 minute = 1 XP
+		totalXP := totalSeconds / 60
+		level, currentXP, xpNext := computeLevel(totalXP)
+
+		skills = append(skills, models.SkillProgress{
+			UserDefinedName: name,
+			Level:           level,
+			CurrentXP:       currentXP,
+			XPForNextLevel:  xpNext,
+			TotalXP:         totalXP,
+		})
+	}
+
+	if skills == nil {
+		return make([]models.SkillProgress, 0), nil
+	}
+	return skills, nil
 }

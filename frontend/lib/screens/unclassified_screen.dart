@@ -128,23 +128,55 @@ class _UnclassifiedScreenState extends State<UnclassifiedScreen> with WidgetsBin
           return const Center(child: CircularProgressIndicator());
         }
 
-        // If there's nothing to classify, that's the most important state. Show success message.
+        // If there's nothing to classify, figure out if it's "inbox zero" or "first run".
         if (provider.groupedUnclassifiedSessions.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.check_circle_outline, color: Colors.green, size: 60),
-                const SizedBox(height: 16),
-                const Text('All activities classified! 🎉', style: TextStyle(fontSize: 20)),
-                const SizedBox(height: 8),
-                Text("Check your Dashboard tab.", style: TextStyle(fontSize: 16, color: Colors.grey[400])),
-                const SizedBox(height: 16),
-                // Show polling status
-                _buildPollingStatus(provider),
-              ],
-            ),
-          );
+          // Check for the "truly empty" state (first run)
+          final isFirstRun = provider.todaySummary.isEmpty && provider.recentActivities.isEmpty;
+
+          if (isFirstRun && !provider.isLoading) {
+            // Show the welcome/onboarding message
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.hourglass_top_outlined, size: 60, color: Colors.grey),
+                    const SizedBox(height: 24),
+                    const Text(
+                      'Ready to Analyze!',
+                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Use your computer for a few minutes. Your activities will appear here, ready to be classified.',
+                      style: TextStyle(fontSize: 16, color: Colors.grey[400]),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 24),
+                    _buildPollingStatus(provider),
+                  ],
+                ),
+              ),
+            );
+          } else {
+            // Show the regular "inbox zero" message
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.check_circle_outline, color: Colors.green, size: 60),
+                  const SizedBox(height: 16),
+                  const Text('All activities classified! 🎉', style: TextStyle(fontSize: 20)),
+                  const SizedBox(height: 8),
+                  Text("Check your Dashboard tab.", style: TextStyle(fontSize: 16, color: Colors.grey[400])),
+                  const SizedBox(height: 16),
+                  _buildPollingStatus(provider),
+                ],
+              ),
+            );
+          }
         }
 
         // If we have data but there was an error fetching updates, show it.
@@ -308,7 +340,7 @@ class _UnclassifiedScreenState extends State<UnclassifiedScreen> with WidgetsBin
           const Icon(Icons.refresh, size: 14, color: Colors.blue),
           const SizedBox(width: 4),
           Text(
-            "Auto-refreshing every minute",
+            "Auto-refresh enabled",
             style: TextStyle(fontSize: 11, color: Colors.grey[600]),
           ),
         ],

@@ -118,3 +118,12 @@ type ExistingClassification struct {
 	GoalContext     string `json:"goal_context"`
 	IsHelpful       bool   `json:"is_helpful"`
 }
+
+// SkillProgress represents XP and level information for a user-defined classification (skill).
+type SkillProgress struct {
+	UserDefinedName string `json:"user_defined_name"`
+	Level           int    `json:"level"`
+	CurrentXP       int64  `json:"current_xp"`
+	XPForNextLevel  int64  `json:"xp_for_next_level"`
+	TotalXP         int64  `json:"total_xp"`
+}
